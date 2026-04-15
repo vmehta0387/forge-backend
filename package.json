@@ -1,0 +1,16 @@
+{
+  "name": "forge3d-clean-export-service",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Render-ready Blender clean STL export service for Forge3D",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node src/server.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.19.2"
+  }
+}
+

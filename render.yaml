@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: forge3d-clean-export
+    env: docker
+    dockerfilePath: ./backend/Dockerfile
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: ASSET_ROOT
+        value: /app/assets
+      - key: BLENDER_BIN
+        value: /usr/bin/blender
+      - key: EXPORT_TIMEOUT_MS
+        value: 360000
