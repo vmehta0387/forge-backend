@@ -6,6 +6,7 @@ Render-friendly backend service that converts Forge3D scene JSON into a cleaned 
 
 - `GET /health`
 - `POST /api/clean-export`
+- `POST /api/clean-export-stl` (recommended fast path)
 
 Request body:
 
@@ -25,12 +26,21 @@ Response:
 
 - `200` with binary STL payload (`Content-Type: model/stl`)
 
+### Fast Path (`/api/clean-export-stl`)
+
+- Request body: raw STL binary (`Content-Type: model/stl` or `application/octet-stream`)
+- Optional query: `?filename=forge3d-export.stl`
+- Pipeline: minimal cleanup only (remove doubles, normals, optional light decimate)
+- This avoids heavy runtime booleans by default.
+
 ## Environment Variables
 
 - `PORT` (default: `10000`)
 - `ASSET_ROOT` (default: `/app/assets` in Docker)
 - `BLENDER_BIN` (default: `blender`)
 - `EXPORT_TIMEOUT_MS` (default: `360000`)
+- `FAST_EXPORT_TIMEOUT_MS` (default: `120000`)
+- `FAST_DECIMATE_RATIO` (default: `0.88`)
 - `CORS_ORIGIN` optional comma-separated origins
 
 ## Render Deploy

@@ -3,16 +3,13 @@ const path = require('path');
 
 const MAX_CAPTURED_LOG_CHARS = 12000;
 
-function runBlenderExport({
+function runBlenderScript({
   jobId,
-  scenePath,
-  outputPath,
-  assetRoot,
-  mode = 'robust',
+  scriptPath,
+  scriptArgs,
   timeoutMs = 6 * 60 * 1000,
 }) {
   const blenderBin = process.env.BLENDER_BIN || 'blender';
-  const blenderScript = path.resolve(__dirname, '../scripts/clean_export.py');
 
   const args = [
     '-b',
@@ -21,16 +18,9 @@ function runBlenderExport({
     '1',
     '-noaudio',
     '-P',
-    blenderScript,
+    scriptPath,
     '--',
-    '--scene',
-    scenePath,
-    '--output',
-    outputPath,
-    '--asset-root',
-    assetRoot,
-    '--mode',
-    mode,
+    ...scriptArgs,
   ];
 
   return new Promise((resolve, reject) => {
@@ -111,6 +101,56 @@ function runBlenderExport({
   });
 }
 
+function runBlenderExport({
+  jobId,
+  scenePath,
+  outputPath,
+  assetRoot,
+  mode = 'robust',
+  timeoutMs = 6 * 60 * 1000,
+}) {
+  const blenderScript = path.resolve(__dirname, '../scripts/clean_export.py');
+  return runBlenderScript({
+    jobId,
+    scriptPath: blenderScript,
+    scriptArgs: [
+      '--scene',
+      scenePath,
+      '--output',
+      outputPath,
+      '--asset-root',
+      assetRoot,
+      '--mode',
+      mode,
+    ],
+    timeoutMs,
+  });
+}
+
+function runBlenderFastClean({
+  jobId,
+  inputPath,
+  outputPath,
+  decimateRatio,
+  timeoutMs = 4 * 60 * 1000,
+}) {
+  const blenderScript = path.resolve(__dirname, '../scripts/fast_clean_stl.py');
+  return runBlenderScript({
+    jobId,
+    scriptPath: blenderScript,
+    scriptArgs: [
+      '--input',
+      inputPath,
+      '--output',
+      outputPath,
+      '--decimate-ratio',
+      String(decimateRatio),
+    ],
+    timeoutMs,
+  });
+}
+
 module.exports = {
   runBlenderExport,
+  runBlenderFastClean,
 };
