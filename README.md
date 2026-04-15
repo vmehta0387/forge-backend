@@ -7,6 +7,10 @@ Render-friendly backend service that converts Forge3D scene JSON into a cleaned 
 - `GET /health`
 - `POST /api/clean-export`
 - `POST /api/clean-export-stl` (recommended fast path)
+- `POST /api/clean-export/jobs` (full repair queue)
+- `GET /api/clean-export/jobs`
+- `GET /api/clean-export/jobs/:jobId`
+- `GET /api/clean-export/jobs/:jobId/download`
 
 Request body:
 
@@ -33,6 +37,19 @@ Response:
 - Pipeline: minimal cleanup only (remove doubles, normals, optional light decimate)
 - This avoids heavy runtime booleans by default.
 
+### Full Repair Queue (`/api/clean-export/jobs`)
+
+- Request body:
+  - `scene` (or `config`) Forge scene JSON
+  - `filename` optional output STL filename
+  - `notifyEmail` optional (for webhook-based notification flow)
+- Response: `202` with `job` payload.
+- Poll job status with:
+  - `GET /api/clean-export/jobs/:jobId`
+  - or batch list: `GET /api/clean-export/jobs?ids=job1,job2`
+- Download when complete:
+  - `GET /api/clean-export/jobs/:jobId/download`
+
 ## Environment Variables
 
 - `PORT` (default: `10000`)
@@ -41,6 +58,11 @@ Response:
 - `EXPORT_TIMEOUT_MS` (default: `360000`)
 - `FAST_EXPORT_TIMEOUT_MS` (default: `120000`)
 - `FAST_DECIMATE_RATIO` (default: `0.88`)
+- `MAX_PARALLEL_QUEUED_EXPORTS` (default: `1`)
+- `MAX_QUEUED_JOBS` (default: `100`)
+- `MAX_STORED_JOBS` (default: `400`)
+- `JOB_RETENTION_MS` (default: `86400000`)
+- `JOB_NOTIFY_WEBHOOK_URL` optional webhook called after queued completion
 - `CORS_ORIGIN` optional comma-separated origins
 
 ## Render Deploy
