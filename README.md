@@ -52,6 +52,28 @@ npm install
 npm start
 ```
 
+## AWS One-Command Redeploy
+
+If this backend is running on EC2 with Docker, use:
+
+```bash
+chmod +x scripts/redeploy_aws.sh
+./scripts/redeploy_aws.sh
+```
+
+It will:
+
+1. Pull latest `main`
+2. Rebuild Docker image
+3. Replace old container
+4. Run `/health` and `/health/deps` checks
+
+Optional example:
+
+```bash
+BRANCH=main APP_NAME=forge-backend HOST_PORT=10000 ./scripts/redeploy_aws.sh
+```
+
 ## Standalone Repo Flow
 
 If you want a separate GitHub repo:
