@@ -201,9 +201,9 @@ def grid_center_world(grid_cols, grid_rows):
     return hex_to_world(center_q, center_r)
 
 
-def duplicate_linked(template_obj, name):
+def duplicate_linked(template_obj, name, single_user_mesh=False):
     inst = template_obj.copy()
-    inst.data = template_obj.data
+    inst.data = template_obj.data.copy() if single_user_mesh else template_obj.data
     inst.name = name
     bpy.context.scene.collection.objects.link(inst)
     return inst
@@ -233,7 +233,7 @@ def build_scene_objects(scene_data, base_template, object_templates):
         py = float(obj_data["position"][1])
         pz = float(obj_data["position"][2])
 
-        inst = duplicate_linked(template, f"obj_{idx}")
+        inst = duplicate_linked(template, f"obj_{idx}", single_user_mesh=True)
         inst.location = Vector((px, pz, py))
         inst.rotation_euler = (0.0, 0.0, float(obj_data.get("rotationY", 0.0)))
         object_scale = float(obj_data.get("objectScale", 1.0))
