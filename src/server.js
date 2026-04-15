@@ -81,6 +81,8 @@ app.post('/api/clean-export', async (req, res) => {
   const jobId = crypto.randomUUID();
   const timeoutMs = Number(process.env.EXPORT_TIMEOUT_MS || 6 * 60 * 1000);
   const assetRoot = process.env.ASSET_ROOT || path.resolve(process.cwd(), 'assets');
+  const exportMode = process.env.EXPORT_MODE || 'robust';
+  const allowLiteFallback = process.env.ALLOW_LITE_FALLBACK !== '0';
 
   let tempDir = '';
 
@@ -107,13 +109,38 @@ app.post('/api/clean-export', async (req, res) => {
     const outputPath = path.join(tempDir, 'clean-export.stl');
 
     await fs.writeFile(scenePath, JSON.stringify(scene), 'utf8');
-    const blenderRun = await runBlenderExport({
-      jobId,
-      scenePath,
-      outputPath,
-      assetRoot,
-      timeoutMs,
-    });
+    let blenderRun = null;
+    let effectiveMode = exportMode;
+
+    const runExport = async (mode) => {
+      await fs.rm(outputPath, { force: true }).catch(() => {});
+      return runBlenderExport({
+        jobId,
+        scenePath,
+        outputPath,
+        assetRoot,
+        timeoutMs,
+        mode,
+      });
+    };
+
+    try {
+      blenderRun = await runExport(effectiveMode);
+    } catch (error) {
+      const signal = error?.signal;
+      const shouldTryLite =
+        allowLiteFallback &&
+        effectiveMode !== 'lite' &&
+        (signal === 'SIGKILL' || signal === 'SIGTERM' || /out of memory|terminated by signal/i.test(String(error?.message || '')));
+
+      if (!shouldTryLite) {
+        throw error;
+      }
+
+      console.warn(`[clean-export:${jobId}] retrying in lite mode after failure in ${effectiveMode} mode`);
+      effectiveMode = 'lite';
+      blenderRun = await runExport('lite');
+    }
 
     try {
       await fs.access(outputPath);
@@ -135,6 +162,7 @@ app.post('/api/clean-export', async (req, res) => {
     res.setHeader('Content-Length', String(stat.size));
     res.setHeader('X-Export-Job-Id', jobId);
     res.setHeader('X-Export-Duration-Ms', String(elapsedMs));
+    res.setHeader('X-Export-Mode', effectiveMode);
     res.status(200);
 
     await new Promise((resolve, reject) => {

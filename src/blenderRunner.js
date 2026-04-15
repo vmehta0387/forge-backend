@@ -8,6 +8,7 @@ function runBlenderExport({
   scenePath,
   outputPath,
   assetRoot,
+  mode = 'robust',
   timeoutMs = 6 * 60 * 1000,
 }) {
   const blenderBin = process.env.BLENDER_BIN || 'blender';
@@ -28,6 +29,8 @@ function runBlenderExport({
     outputPath,
     '--asset-root',
     assetRoot,
+    '--mode',
+    mode,
   ];
 
   return new Promise((resolve, reject) => {
@@ -75,7 +78,7 @@ function runBlenderExport({
       reject(error);
     });
 
-    child.on('close', (code) => {
+    child.on('close', (code, signal) => {
       clearTimeout(timeout);
       if (timedOut) {
         reject(new Error(`Blender export timed out after ${timeoutMs}ms.`));
@@ -83,11 +86,22 @@ function runBlenderExport({
       }
 
       if (code !== 0) {
+        const killedBySignal = code === null && signal;
+        const hint = killedBySignal
+          ? `Blender was terminated by signal ${signal}. This is commonly caused by OOM on low-memory instances.`
+          : '';
+        const logs = stderr || stdout || 'No Blender logs were captured.';
+        const message =
+          `Blender exited with code ${code}.` +
+          (signal ? ` signal=${signal}.` : '') +
+          `\n${hint}\n${logs}`;
+        const err = new Error(message);
+        err.exitCode = code;
+        err.signal = signal;
+        err.stdout = stdout;
+        err.stderr = stderr;
         reject(
-          new Error(
-            `Blender exited with code ${code}.\n` +
-              `${stderr || stdout || 'No Blender logs were captured.'}`
-          )
+          err
         );
         return;
       }

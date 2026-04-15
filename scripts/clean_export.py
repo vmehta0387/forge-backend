@@ -44,6 +44,7 @@ def parse_args():
     parser.add_argument("--scene", required=True, help="Path to scene JSON")
     parser.add_argument("--output", required=True, help="Path to output STL")
     parser.add_argument("--asset-root", required=True, help="Asset root directory")
+    parser.add_argument("--mode", default="robust", choices=["robust", "lite"], help="Export pipeline mode")
     return parser.parse_args(argv)
 
 
@@ -338,6 +339,7 @@ def main():
     scene_data = load_scene_json(args.scene)
     asset_root = args.asset_root
     output_path = args.output
+    mode = args.mode
 
     if not os.path.isdir(asset_root):
         raise RuntimeError(f"Asset root directory missing: {asset_root}")
@@ -369,19 +371,24 @@ def main():
 
     final_obj = base_joined
     used_fallback = False
-    try:
-        if object_instances and len(object_instances) > FAST_FALLBACK_OBJECT_THRESHOLD:
-            # For large object counts, full exact boolean is expensive on constrained instances.
-            all_objs = [base_joined] + object_instances
-            final_obj = join_objects(all_objs, "terrain_joined_fast_fallback")
+    if mode == "lite":
+        if object_instances:
+            final_obj = join_objects([base_joined] + object_instances, "terrain_joined_lite")
+            used_fallback = False
+    else:
+        try:
+            if object_instances and len(object_instances) > FAST_FALLBACK_OBJECT_THRESHOLD:
+                # For large object counts, full exact boolean is expensive on constrained instances.
+                all_objs = [base_joined] + object_instances
+                final_obj = join_objects(all_objs, "terrain_joined_fast_fallback")
+                used_fallback = True
+            elif object_instances:
+                final_obj = boolean_union(base_joined, object_instances)
+        except Exception as error:
+            print(f"[clean-export] Boolean union failed, fallback remesh will be used: {error}")
+            all_objs = [base_joined] + [obj for obj in object_instances if obj.name in bpy.data.objects]
+            final_obj = join_objects(all_objs, "terrain_joined_fallback")
             used_fallback = True
-        elif object_instances:
-            final_obj = boolean_union(base_joined, object_instances)
-    except Exception as error:
-        print(f"[clean-export] Boolean union failed, fallback remesh will be used: {error}")
-        all_objs = [base_joined] + [obj for obj in object_instances if obj.name in bpy.data.objects]
-        final_obj = join_objects(all_objs, "terrain_joined_fallback")
-        used_fallback = True
 
     mesh_cleanup(final_obj)
     if used_fallback:
