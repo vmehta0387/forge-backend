@@ -16,6 +16,8 @@ function runBlenderExport({
   const args = [
     '-b',
     '--factory-startup',
+    '--python-exit-code',
+    '1',
     '-noaudio',
     '-P',
     blenderScript,

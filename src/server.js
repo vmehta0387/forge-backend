@@ -107,13 +107,22 @@ app.post('/api/clean-export', async (req, res) => {
     const outputPath = path.join(tempDir, 'clean-export.stl');
 
     await fs.writeFile(scenePath, JSON.stringify(scene), 'utf8');
-    await runBlenderExport({
+    const blenderRun = await runBlenderExport({
       jobId,
       scenePath,
       outputPath,
       assetRoot,
       timeoutMs,
     });
+
+    try {
+      await fs.access(outputPath);
+    } catch {
+      throw new Error(
+        'Blender finished but did not produce STL output file.\n' +
+          `${blenderRun?.stderr || blenderRun?.stdout || 'No Blender logs captured.'}`
+      );
+    }
 
     const stat = await fs.stat(outputPath);
     const elapsedMs = Date.now() - startedAt;
