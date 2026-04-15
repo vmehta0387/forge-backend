@@ -13,6 +13,7 @@ function runBlenderExport({
 
   const args = [
     '-b',
+    '--factory-startup',
     '-noaudio',
     '-P',
     blenderScript,
@@ -28,7 +29,16 @@ function runBlenderExport({
   return new Promise((resolve, reject) => {
     const child = spawn(blenderBin, args, {
       stdio: ['ignore', 'pipe', 'pipe'],
-      env: process.env,
+      env: {
+        ...process.env,
+        // Keep Blender CPU thread usage low to reduce memory spikes on small Render instances.
+        OMP_NUM_THREADS: process.env.OMP_NUM_THREADS || '1',
+        OPENBLAS_NUM_THREADS: process.env.OPENBLAS_NUM_THREADS || '1',
+        MKL_NUM_THREADS: process.env.MKL_NUM_THREADS || '1',
+        NUMEXPR_NUM_THREADS: process.env.NUMEXPR_NUM_THREADS || '1',
+        BLIS_NUM_THREADS: process.env.BLIS_NUM_THREADS || '1',
+        VECLIB_MAXIMUM_THREADS: process.env.VECLIB_MAXIMUM_THREADS || '1',
+      },
     });
 
     let stdout = '';
@@ -82,4 +92,3 @@ function runBlenderExport({
 module.exports = {
   runBlenderExport,
 };
-

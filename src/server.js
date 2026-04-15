@@ -11,6 +11,8 @@ const { runBlenderExport } = require('./blenderRunner');
 
 const app = express();
 const port = Number(process.env.PORT || 10000);
+const maxParallelExports = Math.max(1, Number(process.env.MAX_PARALLEL_EXPORTS || 1));
+let activeExports = 0;
 
 app.use(
   cors({
@@ -82,6 +84,16 @@ app.post('/api/clean-export', async (req, res) => {
   let tempDir = '';
 
   try {
+    if (activeExports >= maxParallelExports) {
+      res.setHeader('Retry-After', '8');
+      return res.status(429).json({
+        error: 'Exporter is busy. Please retry in a few seconds.',
+        activeExports,
+        maxParallelExports,
+      });
+    }
+    activeExports += 1;
+
     const sourceScene = req.body?.scene ?? req.body?.config;
     const scene = normalizeScenePayload(sourceScene);
 
@@ -120,6 +132,9 @@ app.post('/api/clean-export', async (req, res) => {
       jobId,
     });
   } finally {
+    if (activeExports > 0) {
+      activeExports -= 1;
+    }
     if (tempDir) {
       await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
     }

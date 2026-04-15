@@ -14,7 +14,8 @@ HEX_GAP = 0.04
 TARGET_TILE_DIAMETER = (HEX_SIZE - HEX_GAP) * 2.0
 MIN_PRINT_WIDTH_MM = 90.0
 MAX_PRINT_WIDTH_MM = 150.0
-CSG_OBJECT_LIMIT = 160
+CSG_OBJECT_LIMIT = 80
+FAST_FALLBACK_OBJECT_THRESHOLD = 40
 
 BASE_STL_REL = os.path.join("terrain", "Base Tiles_v1.stl")
 OBJECT_STL_REL = {
@@ -362,7 +363,12 @@ def main():
     final_obj = base_joined
     used_fallback = False
     try:
-        if object_instances:
+        if object_instances and len(object_instances) > FAST_FALLBACK_OBJECT_THRESHOLD:
+            # For large object counts, full exact boolean is expensive on constrained instances.
+            all_objs = [base_joined] + object_instances
+            final_obj = join_objects(all_objs, "terrain_joined_fast_fallback")
+            used_fallback = True
+        elif object_instances:
             final_obj = boolean_union(base_joined, object_instances)
     except Exception as error:
         print(f"[clean-export] Boolean union failed, fallback remesh will be used: {error}")
@@ -384,4 +390,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
