@@ -4,6 +4,7 @@ const path = require('path');
 const crypto = require('crypto');
 const os = require('os');
 const fs = require('fs/promises');
+const { spawnSync } = require('child_process');
 
 const { normalizeScenePayload } = require('./validateScene');
 const { runBlenderExport } = require('./blenderRunner');
@@ -20,6 +21,56 @@ app.use(express.json({ limit: '5mb' }));
 
 app.get('/health', (_req, res) => {
   res.json({ ok: true, service: 'forge3d-clean-export', timestamp: new Date().toISOString() });
+});
+
+app.get('/health/deps', async (_req, res) => {
+  const assetRoot = process.env.ASSET_ROOT || path.resolve(process.cwd(), 'assets');
+  const blenderBin = process.env.BLENDER_BIN || 'blender';
+  const requiredFiles = [
+    path.join(assetRoot, 'terrain', 'Base Tiles_v1.stl'),
+    path.join(assetRoot, 'objects', 'Single Assets_v1.stl'),
+    path.join(assetRoot, 'objects', 'Single Assets_v2.stl'),
+    path.join(assetRoot, 'objects', 'Single Assets_v3.stl'),
+    path.join(assetRoot, 'objects', 'Single Assets_v4.stl'),
+  ];
+
+  const fileChecks = await Promise.all(
+    requiredFiles.map(async (filePath) => {
+      try {
+        await fs.access(filePath);
+        return { path: filePath, ok: true };
+      } catch {
+        return { path: filePath, ok: false };
+      }
+    })
+  );
+
+  const blenderVersion = spawnSync(blenderBin, ['--version'], {
+    encoding: 'utf8',
+    timeout: 15000,
+  });
+
+  const blenderOk = blenderVersion.status === 0;
+  const missingAssets = fileChecks.filter((entry) => !entry.ok).map((entry) => entry.path);
+
+  const response = {
+    ok: blenderOk && missingAssets.length === 0,
+    blender: {
+      bin: blenderBin,
+      ok: blenderOk,
+      code: blenderVersion.status,
+      stdout: (blenderVersion.stdout || '').split('\n').slice(0, 2).join('\n'),
+      stderr: blenderVersion.stderr || '',
+    },
+    assets: {
+      root: assetRoot,
+      ok: missingAssets.length === 0,
+      missing: missingAssets,
+      checks: fileChecks,
+    },
+  };
+
+  res.status(response.ok ? 200 : 500).json(response);
 });
 
 app.post('/api/clean-export', async (req, res) => {
@@ -78,4 +129,3 @@ app.post('/api/clean-export', async (req, res) => {
 app.listen(port, () => {
   console.log(`forge3d-clean-export listening on :${port}`);
 });
-
