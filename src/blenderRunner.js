@@ -1,6 +1,8 @@
 const { spawn } = require('child_process');
 const path = require('path');
 
+const MAX_CAPTURED_LOG_CHARS = 12000;
+
 function runBlenderExport({
   jobId,
   scenePath,
@@ -52,13 +54,17 @@ function runBlenderExport({
 
     child.stdout.on('data', (chunk) => {
       const text = chunk.toString();
-      stdout += text;
+      if (stdout.length < MAX_CAPTURED_LOG_CHARS) {
+        stdout += text.slice(0, MAX_CAPTURED_LOG_CHARS - stdout.length);
+      }
       process.stdout.write(`[clean-export:${jobId}] ${text}`);
     });
 
     child.stderr.on('data', (chunk) => {
       const text = chunk.toString();
-      stderr += text;
+      if (stderr.length < MAX_CAPTURED_LOG_CHARS) {
+        stderr += text.slice(0, MAX_CAPTURED_LOG_CHARS - stderr.length);
+      }
       process.stderr.write(`[clean-export:${jobId}] ${text}`);
     });
 

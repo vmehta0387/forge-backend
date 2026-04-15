@@ -346,15 +346,22 @@ def main():
     base_template = prepare_base_template(asset_root)
 
     object_templates = {}
-    for object_type in OBJECT_STL_REL:
+    required_object_types = sorted(
+        {
+            obj.get("type")
+            for obj in scene_data.get("objects", [])
+            if obj.get("type") in OBJECT_STL_REL
+        }
+    )
+    for object_type in required_object_types:
         object_templates[object_type] = prepare_object_template(asset_root, object_type)
 
     base_instances, object_instances = build_scene_objects(scene_data, base_template, object_templates)
 
-    # Remove hidden templates before final join/export.
-    base_template.hide_set(True)
-    for template in object_templates.values():
-        template.hide_set(True)
+    # Remove template objects early to reduce memory pressure.
+    bpy.data.objects.remove(base_template, do_unlink=True)
+    for template in list(object_templates.values()):
+        bpy.data.objects.remove(template, do_unlink=True)
 
     base_joined = join_objects(base_instances, "terrain_base")
     if base_joined is None:

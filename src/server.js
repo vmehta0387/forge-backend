@@ -4,6 +4,7 @@ const path = require('path');
 const crypto = require('crypto');
 const os = require('os');
 const fs = require('fs/promises');
+const fss = require('fs');
 const { spawnSync } = require('child_process');
 
 const { normalizeScenePayload } = require('./validateScene');
@@ -114,7 +115,7 @@ app.post('/api/clean-export', async (req, res) => {
       timeoutMs,
     });
 
-    const stl = await fs.readFile(outputPath);
+    const stat = await fs.stat(outputPath);
     const elapsedMs = Date.now() - startedAt;
     const filename = typeof req.body?.filename === 'string' && req.body.filename.trim()
       ? req.body.filename.trim()
@@ -122,9 +123,18 @@ app.post('/api/clean-export', async (req, res) => {
 
     res.setHeader('Content-Type', 'model/stl');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Content-Length', String(stat.size));
     res.setHeader('X-Export-Job-Id', jobId);
     res.setHeader('X-Export-Duration-Ms', String(elapsedMs));
-    res.status(200).send(stl);
+    res.status(200);
+
+    await new Promise((resolve, reject) => {
+      const stream = fss.createReadStream(outputPath);
+      stream.on('error', reject);
+      res.on('error', reject);
+      res.on('close', resolve);
+      stream.pipe(res);
+    });
   } catch (error) {
     console.error('[clean-export] failed', error);
     res.status(500).json({
