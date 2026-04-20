@@ -7,12 +7,21 @@ const fs = require('fs/promises');
 const fss = require('fs');
 const { spawnSync } = require('child_process');
 
-const { runTrimeshClean, runColor3mfExport } = require('./pythonRunner');
+const { runTrimeshClean, runColor3mfExport, runSceneStlExport } = require('./pythonRunner');
 
 const app = express();
 const port = Number(process.env.PORT || 10000);
 const maxParallelExports = Math.max(1, Number(process.env.MAX_PARALLEL_EXPORTS || 1));
 const trimeshTimeoutMs = Math.max(5000, Number(process.env.TRIMESH_CLEAN_TIMEOUT_MS || 2 * 60 * 1000));
+const color3mfTimeoutMs = Math.max(
+  trimeshTimeoutMs,
+  Number(process.env.COLOR_3MF_TIMEOUT_MS || 3 * 60 * 1000)
+);
+const sceneBuildTimeoutMs = Math.max(
+  trimeshTimeoutMs,
+  Number(process.env.SCENE_BUILD_TIMEOUT_MS || 3 * 60 * 1000)
+);
+const assetRoot = process.env.ASSET_ROOT || path.resolve(process.cwd(), 'assets');
 
 let activeExports = 0;
 
@@ -49,6 +58,16 @@ function safeFilename(name, fallback = 'forge3d-clean-export.stl', extension = '
   return cleaned.toLowerCase().endsWith(extension) ? cleaned : `${cleaned}${extension}`;
 }
 
+function isValidScenePayload(scene) {
+  return (
+    scene &&
+    typeof scene === 'object' &&
+    !Array.isArray(scene) &&
+    Array.isArray(scene.tiles) &&
+    scene.tiles.length > 0
+  );
+}
+
 async function streamFileDownload({ res, filePath, filename, contentType, headers = {} }) {
   const stat = await fs.stat(filePath);
   res.setHeader('Content-Type', contentType);
@@ -77,11 +96,11 @@ app.get('/health', (_req, res) => {
     timestamp: new Date().toISOString(),
     activeExports,
     maxParallelExports,
+    sceneBuildTimeoutMs,
   });
 });
 
 app.get('/health/deps', async (_req, res) => {
-  const assetRoot = process.env.ASSET_ROOT || path.resolve(process.cwd(), 'assets');
   const pythonBin = process.env.PYTHON_BIN || 'python3';
   const requiredFiles = [
     path.join(assetRoot, 'terrain', 'Base Tiles_v1.stl'),
@@ -205,14 +224,82 @@ async function runTrimeshExport(req, res, modeLabel) {
   }
 }
 
+async function runSceneBasedTrimeshExport(req, res, modeLabel) {
+  const startedAt = Date.now();
+  const jobId = crypto.randomUUID();
+  let tempDir = '';
+
+  try {
+    if (activeExports >= maxParallelExports) {
+      res.setHeader('Retry-After', '5');
+      return res.status(429).json({
+        error: 'Exporter is busy. Please retry in a few seconds.',
+        activeExports,
+        maxParallelExports,
+      });
+    }
+    activeExports += 1;
+
+    const scene = req.body;
+    if (!isValidScenePayload(scene)) {
+      return res.status(400).json({
+        error: 'Scene payload missing or has no tiles.',
+      });
+    }
+
+    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'forge3d-scene-trimesh-export-'));
+    const scenePath = path.join(tempDir, 'scene.json');
+    const rawOutputPath = path.join(tempDir, 'raw-output.stl');
+    const cleanedOutputPath = path.join(tempDir, 'clean-output.stl');
+    await fs.writeFile(scenePath, JSON.stringify(scene), 'utf8');
+
+    await runSceneStlExport({
+      jobId,
+      scenePath,
+      outputPath: rawOutputPath,
+      assetRoot,
+      timeoutMs: sceneBuildTimeoutMs,
+    });
+
+    await runTrimeshClean({
+      jobId,
+      inputPath: rawOutputPath,
+      outputPath: cleanedOutputPath,
+      timeoutMs: trimeshTimeoutMs,
+    });
+
+    const elapsedMs = Date.now() - startedAt;
+    const filename = safeFilename(req.query?.filename, 'forge3d-clean-export.stl', '.stl');
+    await streamFileDownload({
+      res,
+      filePath: cleanedOutputPath,
+      filename,
+      contentType: 'model/stl',
+      headers: {
+        'X-Export-Job-Id': jobId,
+        'X-Export-Duration-Ms': elapsedMs,
+        'X-Export-Mode': modeLabel,
+      },
+    });
+  } catch (error) {
+    console.error('[scene-trimesh-export] failed', error);
+    res.status(500).json({
+      error: (error && error.message) || 'Failed to generate scene STL.',
+      jobId,
+    });
+  } finally {
+    if (activeExports > 0) {
+      activeExports -= 1;
+    }
+    if (tempDir) {
+      await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
+    }
+  }
+}
+
 app.post('/api/export-color-3mf', async (req, res) => {
   const startedAt = Date.now();
   const jobId = crypto.randomUUID();
-  const color3mfTimeoutMs = Math.max(
-    trimeshTimeoutMs,
-    Number(process.env.COLOR_3MF_TIMEOUT_MS || 3 * 60 * 1000)
-  );
-  const assetRoot = process.env.ASSET_ROOT || path.resolve(process.cwd(), 'assets');
   let tempDir = '';
 
   try {
@@ -227,7 +314,7 @@ app.post('/api/export-color-3mf', async (req, res) => {
     activeExports += 1;
 
     const scene = req.body && typeof req.body === 'object' ? req.body : null;
-    if (!scene || !Array.isArray(scene.tiles) || scene.tiles.length === 0) {
+    if (!isValidScenePayload(scene)) {
       return res.status(400).json({
         error: 'Scene payload missing or has no tiles.',
       });
@@ -275,6 +362,10 @@ app.post('/api/export-color-3mf', async (req, res) => {
   }
 });
 
+app.post('/api/clean-export-scene-trimesh-stl', async (req, res) => {
+  await runSceneBasedTrimeshExport(req, res, 'scene-trimesh');
+});
+
 app.post('/api/clean-export-trimesh-stl', rawStlParser, async (req, res) => {
   await runTrimeshExport(req, res, 'trimesh');
 });
@@ -298,6 +389,23 @@ app.post('/api/clean-export/jobs', (_req, res) => {
 app.get('/api/clean-export/jobs', (_req, res) => {
   res.status(410).json({
     error: 'Queued full-repair export is retired in trimesh-only mode.',
+  });
+});
+
+app.use((error, _req, res, _next) => {
+  if (res.headersSent) return;
+
+  const status = Number(error?.status || error?.statusCode || 500);
+  if (status === 413 || error?.type === 'entity.too.large') {
+    return res.status(413).json({
+      error:
+        'Request body is too large. Use /api/clean-export-scene-trimesh-stl for large exports or increase proxy upload limits.',
+    });
+  }
+
+  console.error('[request-error]', error);
+  return res.status(status >= 400 && status < 600 ? status : 500).json({
+    error: (error && error.message) || 'Request failed.',
   });
 });
 

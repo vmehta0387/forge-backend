@@ -7,6 +7,7 @@ Lightweight backend service to clean raw STL from the frontend and return printa
 - `GET /health`
 - `GET /health/deps`
 - `POST /api/clean-export-trimesh-stl` (primary)
+- `POST /api/clean-export-scene-trimesh-stl` (recommended for large maps)
 - `POST /api/clean-export-stl` (compat alias; same trimesh cleaner)
 - `POST /api/export-color-3mf` (scene JSON -> color 3MF)
 
@@ -32,6 +33,15 @@ Lightweight backend service to clean raw STL from the frontend and return printa
 - Optional query: `?filename=forge3d-color-export.3mf`
 - Response: binary 3MF (`Content-Type: model/3mf`)
 
+### Scene JSON -> clean STL endpoint (`/api/clean-export-scene-trimesh-stl`)
+
+- Request body JSON:
+  - `tiles`: array of `{ q, r, biome }`
+  - `objects`: array of `{ asset, q, r, rotationY, scale, localOffsetX, localOffsetZ }`
+- Optional query: `?filename=forge3d-clean-export.stl`
+- Response: binary cleaned STL (`Content-Type: model/stl`)
+- This avoids large raw STL uploads from the browser and helps prevent proxy `413` errors.
+
 ## Environment Variables
 
 - `PORT` (default: `10000`)
@@ -39,6 +49,7 @@ Lightweight backend service to clean raw STL from the frontend and return printa
 - `PYTHON_BIN` (default: `python3`)
 - `TRIMESH_CLEAN_TIMEOUT_MS` (default: `120000`)
 - `COLOR_3MF_TIMEOUT_MS` (default: `180000`)
+- `SCENE_BUILD_TIMEOUT_MS` (default: `180000`)
 - `MAX_PARALLEL_EXPORTS` (default: `1`)
 - `CORS_ORIGIN` optional comma-separated origins
 

@@ -113,7 +113,24 @@ function runColor3mfExport({
   });
 }
 
+function runSceneStlExport({
+  jobId,
+  scenePath,
+  outputPath,
+  assetRoot,
+  timeoutMs = 3 * 60 * 1000,
+}) {
+  const scriptPath = path.resolve(__dirname, '../scripts/export_scene_stl.py');
+  return runPythonScript({
+    jobId,
+    scriptPath,
+    scriptArgs: ['--scene', scenePath, '--output', outputPath, '--asset-root', assetRoot],
+    timeoutMs,
+  });
+}
+
 module.exports = {
   runTrimeshClean,
   runColor3mfExport,
+  runSceneStlExport,
 };
